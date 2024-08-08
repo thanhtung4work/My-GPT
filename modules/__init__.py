@@ -74,3 +74,54 @@ class Block(nn.Module):
         x = x + self.feed_forward(self.ln2(x))
         # (B, T, n_embd)
         return x
+
+
+class GPTModel(nn.Module):
+    def __init__(self, vocab_size, n_embd, blocksize, n_heads, dropout, n_layers):
+        self.token_embd = nn.Embedding(vocab_size, n_embd)
+        self.position_embd = nn.Embedding(blocksize, n_embd)
+        self.blocks = nn.Sequential(
+            *[Block(n_embd, n_heads, blocksize, dropout) for _ in range(n_layers)]
+        )
+        self.ln_final = nn.LayerNorm(n_embd)
+        self.lm_head = nn.Linear(n_embd, vocab_size)
+
+        self.apply(self._init_weights)
+        self.blocksize = blocksize
+    
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def forward(self, idx, targets = None):
+        B, T = idx.shape
+
+        tok_embd = self.token_embd(idx)
+        pos_embd = self.position_embd(torch.argsort(T))
+        x = tok_embd + pos_embd
+        x = self.blocks(x)
+        x = self.ln_final(x)
+        logits = self.lm_head(x)
+        if targets is None:
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B * T, C)
+            targets = targets.view(B * T)
+            loss = F.cross_entropy(logits, targets)
+        
+        return logits, loss
+    
+    def generate(self, idx, max_new_tokens):
+        for _ in range(max_new_tokens):
+            idx_condf = idx[:, -self.blocksize:]
+            logits, loss = self(idx_condf)
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim = -1)
+            idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
+            idx = torch.cat((idx, idx_next), dim = -1) # (B, T + 1)
+        return idx
