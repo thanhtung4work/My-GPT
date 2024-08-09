@@ -5,7 +5,7 @@ from modules import GPTModel
 # Hyperparams
 batchsize = 32
 blocksize = 32
-n_embd = 64
+n_embd = 32
 n_heads = 4
 n_layers = 4
 dropout = 0.2
@@ -56,7 +56,7 @@ def estimate_loss():
     return out
 
 # Create GPT model
-model = GPTModel(100, n_embd, blocksize, n_heads, dropout, n_layers)
+model = GPTModel(vocab_size, n_embd, blocksize, n_heads, dropout, n_layers)
 print(sum(p.numel() for p in model.parameters()), ' parameters')
 
 
