@@ -78,6 +78,7 @@ class Block(nn.Module):
 
 class GPTModel(nn.Module):
     def __init__(self, vocab_size, n_embd, blocksize, n_heads, dropout, n_layers):
+        super().__init__()
         self.token_embd = nn.Embedding(vocab_size, n_embd)
         self.position_embd = nn.Embedding(blocksize, n_embd)
         self.blocks = nn.Sequential(
@@ -101,7 +102,7 @@ class GPTModel(nn.Module):
         B, T = idx.shape
 
         tok_embd = self.token_embd(idx)
-        pos_embd = self.position_embd(torch.argsort(T))
+        pos_embd = self.position_embd(torch.arange(T))
         x = tok_embd + pos_embd
         x = self.blocks(x)
         x = self.ln_final(x)
