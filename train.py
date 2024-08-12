@@ -1,16 +1,20 @@
+import mlflow
 import torch
 
 from modules import GPTModel
+mlflow.set_tracking_uri(uri="http://127.0.0.1:8080")
+mlflow.set_experiment("Transformer training!")
+
 
 # Hyperparams
 batchsize = 32
-blocksize = 32
-n_embd = 32
-n_heads = 4
-n_layers = 4
+blocksize = 64
+n_embd = 64
+n_heads = 2
+n_layers = 2
 dropout = 0.2
 learning_rate=1e-4
-max_iters = 5000
+max_iters = 1000
 eval_interval = 500
 eval_iters = 200
 
@@ -55,29 +59,49 @@ def estimate_loss():
     model.train()
     return out
 
-# Create GPT model
-model = GPTModel(vocab_size, n_embd, blocksize, n_heads, dropout, n_layers)
-print(sum(p.numel() for p in model.parameters()), ' parameters')
+with mlflow.start_run() as run:
+    mlflow.log_params({
+        "batchsize": batchsize,
+        "blocksize": blocksize,
+        "n_embd": n_embd,
+        "n_heads": n_heads,
+        "n_layers": n_layers,
+        "dropout": dropout,
+        "learning_rate": learning_rate,
+        "max_iters": max_iters,
+        "eval_interval": eval_interval,
+        "eval_iters": eval_iters
+    })
+    
+    # Create GPT model
+    model = GPTModel(vocab_size, n_embd, blocksize, n_heads, dropout, n_layers)
+    print(sum(p.numel() for p in model.parameters()), ' parameters')
 
 
-# Create a PyTorch optimizer
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    # Create a PyTorch optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-for iter in range(max_iters):
+    for iter in range(max_iters):
 
-    # every once in a while evaluate the loss on train and val sets
-    if iter % eval_interval == 0 or iter == max_iters - 1:
-        losses = estimate_loss()
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        # every once in a while evaluate the loss on train and val sets
+        if iter % eval_interval == 0 or iter == max_iters - 1:
+            losses = estimate_loss()
+            print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+            mlflow.log_metrics({"train_loss":  losses['train'], "val_los": losses['val']})
 
-    # sample a batch of data
-    xb, yb = get_batch('train')
+        # sample a batch of data
+        xb, yb = get_batch('train')
 
-    # evaluate the loss
-    logits, loss = model(xb, yb)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+        # evaluate the loss
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+    
+    mlflow.log_metrics({"train_loss":  losses['train'], "val_los": losses['val']})
+    mlflow.pytorch.log_model(
+        model, "transformer_model"
+    )
 
 # generate from the model
 context = torch.zeros((1, 1), dtype=torch.long)
